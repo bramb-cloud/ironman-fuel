@@ -38,12 +38,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?strava=error&reason=notoken', request.url))
     }
 
-    await supabase.from('settings').upsert({
-      user_id: USER_ID,
-      strava_access_token: tokens.access_token,
-      strava_refresh_token: tokens.refresh_token,
-      strava_token_expiry: tokens.expires_at,
-    })
+    // First try update, then insert if no row exists
+    const { error: updateError } = await supabase
+      .from('settings')
+      .update({
+        strava_access_token: tokens.access_token,
+        strava_refresh_token: tokens.refresh_token,
+        strava_token_expiry: tokens.expires_at,
+      })
+      .eq('user_id', USER_ID)
+
+    if (updateError) {
+      console.error('Token save error:', updateError)
+    }
 
     // Fetch recent activities immediately
     await fetchAndStoreActivities(tokens.access_token)
