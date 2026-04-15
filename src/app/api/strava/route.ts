@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
     const tokens = await tokenRes.json()
 
     if (!tokens.access_token) {
-      return NextResponse.redirect(new URL('/?strava=error', request.url))
+      console.error('No access token:', JSON.stringify(tokens))
+      return NextResponse.redirect(new URL('/?strava=error&reason=notoken', request.url))
     }
 
     await supabase.from('settings').upsert({
@@ -49,7 +50,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.redirect(new URL('/?strava=connected', request.url))
   } catch (e) {
-    return NextResponse.redirect(new URL('/?strava=error', request.url))
+    console.error('Strava auth error:', e)
+    return NextResponse.redirect(new URL('/?strava=error&reason=exception', request.url))
   }
 }
 
