@@ -7,6 +7,12 @@ const REDIRECT_URI = 'https://ironman-fuel.vercel.app/api/strava'
 
 export default function SettingsTab({ settings, onUpdate }: any) {
   const [saved, setSaved] = useState(false)
+  const [stravaConnected, setStravaConnected] = useState(!!settings?.strava_access_token)
+
+  useEffect(() => {
+    supabase.from('settings').select('strava_access_token').eq('user_id', USER_ID).single()
+      .then(({ data }) => setStravaConnected(!!data?.strava_access_token))
+  }, [])
 
   async function clearToday() {
     const today = new Date().toISOString().split('T')[0]
@@ -48,7 +54,7 @@ export default function SettingsTab({ settings, onUpdate }: any) {
       <div style={sec}>
         <div style={stitle}>Strava Connection</div>
         <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 16 }}>
-          {settings.strava_access_token ? (
+          {stravaConnected ? (
             <div>
               <div style={{ fontSize: 13, color: 'var(--good)', fontWeight: 600, marginBottom: 4 }}>✓ Connected to Strava</div>
               <div style={{ fontSize: 12, color: 'var(--mu)' }}>Activities sync automatically when you finish a workout on Garmin.</div>
