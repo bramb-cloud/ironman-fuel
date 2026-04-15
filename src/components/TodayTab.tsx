@@ -49,11 +49,13 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
   const ln = LUNCHES[lnIdx]
   const sn = SNACKS[snIdx]
 
-  function getMacros(items: any[], vals: Record<string, number>) {
-    if (!items || items.length === 0) return { kcal: 0, p: 0, c: 0, f: 0 }
-    if (items.fixed) return items.fixed
-    return calcMacros(items.ings || items, vals)
-  }
+  function getMacros(items: any, vals: Record<string, number>) {
+      if (!items) return { kcal: 0, p: 0, c: 0, f: 0 }
+      if (items.fixed) return items.fixed
+      const ings = items.ings || (Array.isArray(items) ? items : [])
+      if (!ings.length) return { kcal: 0, p: 0, c: 0, f: 0 }
+      return calcMacros(ings, vals)
+    }
 
   const bfM = getMacros(bf.ings, bfVals)
   const lnM = ln.fixed ? ln.fixed : getMacros(ln.ings || [], lnVals)
