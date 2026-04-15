@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase, USER_ID } from '@/lib/supabase'
 
 const STRAVA_CLIENT_ID = '212915'
