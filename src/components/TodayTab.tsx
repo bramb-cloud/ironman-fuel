@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { TRAINING_TARGETS, INGREDIENTS } from '@/lib/foods'
 import { supabase, USER_ID } from '@/lib/supabase'
 
@@ -104,22 +104,46 @@ function MealSection({ title, items, onAdd, onRemove, onQtyChange, foodOptions, 
 function sumMacros(items: any[]) {
   return items.reduce((acc, item) => {
     const r = item.qty / 100
-    return { kcal: acc.kcal + Math.round(item.kcalPer * r), p: acc.p + item.pPer * r, c: acc.c + item.cPer * r, f: acc.f + item.fPer * r }
+    return {
+      kcal: acc.kcal + Math.round(item.kcalPer * r),
+      p: Math.round((acc.p + item.pPer * r) * 10) / 10,
+      c: Math.round((acc.c + item.cPer * r) * 10) / 10,
+      f: Math.round((acc.f + item.fPer * r) * 10) / 10,
+    }
   }, { kcal: 0, p: 0, c: 0, f: 0 })
 }
 
+const MEALS = ['breakfast', 'lunch', 'snack', 'dinner', 'extras'] as const
+type MealKey = typeof MEALS[number]
+
 export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) {
-  const [breakfast, setBreakfast] = useState<any[]>([])
-  const [lunch, setLunch] = useState<any[]>([])
-  const [snack, setSnack] = useState<any[]>([])
-  const [dinner, setDinner] = useState<any[]>([])
-  const [extras, setExtras] = useState<any[]>([])
+  const [mealItems, setMealItems] = useState<Record<MealKey, any[]>>({
+    breakfast: [], lunch: [], snack: [], dinner: [], extras: []
+  })
   const [foodOptions, setFoodOptions] = useState<any[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle'|'saving'|'saved'>('idle')
+  const saveTimer = useRef<any>(null)
 
   const training = TRAINING_TARGETS[todayLog.training_day || 'rest']
   const target = settings['kcal_'+(todayLog.training_day||'rest')] || training.kcal
 
   useEffect(() => { buildFoodOptions() }, [])
+
+  // Load saved meal items from Supabase on mount
+  useEffect(() => {
+    if (todayLog?.meal_items) {
+      try {
+        const saved = typeof todayLog.meal_items === 'string'
+          ? JSON.parse(todayLog.meal_items)
+          : todayLog.meal_items
+        if (saved && typeof saved === 'object') {
+          setMealItems(prev => ({ ...prev, ...saved }))
+        }
+      } catch (e) {}
+    }
+    setLoaded(true)
+  }, [todayLog?.id])
 
   async function buildFoodOptions() {
     const builtin = Object.entries(INGREDIENTS).map(([key, info]) => ({
@@ -139,31 +163,67 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
     setFoodOptions([...customFoods, ...builtin])
   }
 
-  function addItem(meal: string, food: any) {
-    const item = { id: food.id+'_'+Date.now(), name: food.name, kcalPer: food.kcalPer, pPer: food.pPer, cPer: food.cPer, fPer: food.fPer, unit: food.unit, isUnit: food.isUnit, qty: food.defaultQty || 100 }
-    const set = { breakfast: setBreakfast, lunch: setLunch, snack: setSnack, dinner: setDinner, extras: setExtras }[meal]
-    if (set) set((prev: any[]) => [...prev, item])
-  }
-  function removeItem(meal: string, id: string) {
-    const set = { breakfast: setBreakfast, lunch: setLunch, snack: setSnack, dinner: setDinner, extras: setExtras }[meal]
-    if (set) set((prev: any[]) => prev.filter((i: any) => i.id !== id))
-  }
-  function updateQty(meal: string, id: string, qty: number) {
-    const set = { breakfast: setBreakfast, lunch: setLunch, snack: setSnack, dinner: setDinner, extras: setExtras }[meal]
-    if (set) set((prev: any[]) => prev.map((i: any) => i.id === id ? { ...i, qty } : i))
+  // Auto-save whenever meal items change (with debounce)
+  useEffect(() => {
+    if (!loaded) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaveStatus('saving')
+    saveTimer.current = setTimeout(() => persistMeals(mealItems), 800)
+  }, [mealItems, loaded])
+
+  async function persistMeals(items: Record<MealKey, any[]>) {
+    const today = new Date().toISOString().split('T')[0]
+    const totals = Object.fromEntries(
+      MEALS.map(m => [m, sumMacros(items[m])])
+    )
+    const total = MEALS.reduce((acc, m) => ({
+      kcal: acc.kcal + totals[m].kcal,
+      p: Math.round((acc.p + totals[m].p) * 10) / 10,
+      c: Math.round((acc.c + totals[m].c) * 10) / 10,
+      f: Math.round((acc.f + totals[m].f) * 10) / 10,
+    }), { kcal: 0, p: 0, c: 0, f: 0 })
+
+    await supabase.from('daily_logs').upsert({
+      user_id: USER_ID,
+      date: today,
+      training_day: todayLog.training_day || 'rest',
+      water_ml: todayLog.water_ml || 0,
+      meal_items: JSON.stringify(items),
+      meals: [{ ...totals, total }],
+    })
+    setSaveStatus('saved')
+    setTimeout(() => setSaveStatus('idle'), 2000)
   }
 
-  const bfM = sumMacros(breakfast), lnM = sumMacros(lunch), snM = sumMacros(snack), dnM = sumMacros(dinner), exM = sumMacros(extras)
-  const total = {
-    kcal: bfM.kcal + lnM.kcal + snM.kcal + dnM.kcal + exM.kcal,
-    p: Math.round((bfM.p+lnM.p+snM.p+dnM.p+exM.p)*10)/10,
-    c: Math.round((bfM.c+lnM.c+snM.c+dnM.c+exM.c)*10)/10,
-    f: Math.round((bfM.f+lnM.f+snM.f+dnM.f+exM.f)*10)/10,
+  function addItem(meal: MealKey, food: any) {
+    const item = {
+      id: food.id+'_'+Date.now(), name: food.name,
+      kcalPer: food.kcalPer, pPer: food.pPer, cPer: food.cPer, fPer: food.fPer,
+      unit: food.unit, isUnit: food.isUnit, qty: food.defaultQty || 100,
+    }
+    setMealItems(prev => ({ ...prev, [meal]: [...prev[meal], item] }))
   }
+
+  function removeItem(meal: MealKey, id: string) {
+    setMealItems(prev => ({ ...prev, [meal]: prev[meal].filter((i: any) => i.id !== id) }))
+  }
+
+  function updateQty(meal: MealKey, id: string, qty: number) {
+    setMealItems(prev => ({ ...prev, [meal]: prev[meal].map((i: any) => i.id === id ? { ...i, qty } : i) }))
+  }
+
+  const macros = Object.fromEntries(MEALS.map(m => [m, sumMacros(mealItems[m])])) as Record<MealKey, any>
+  const total = MEALS.reduce((acc, m) => ({
+    kcal: acc.kcal + macros[m].kcal,
+    p: Math.round((acc.p + macros[m].p) * 10) / 10,
+    c: Math.round((acc.c + macros[m].c) * 10) / 10,
+    f: Math.round((acc.f + macros[m].f) * 10) / 10,
+  }), { kcal: 0, p: 0, c: 0, f: 0 })
+
   const diff = total.kcal - target
-  const pct = Math.min(Math.round((total.kcal/target)*100),100)
-  const hasAny = breakfast.length+lunch.length+snack.length+dinner.length > 0
-  const preFuelWarning = ['ride','run','longride'].includes(todayLog.training_day) && lnM.c < 40 && lunch.length > 0
+  const pct = Math.min(Math.round((total.kcal / target) * 100), 100)
+  const hasAny = MEALS.some(m => mealItems[m].length > 0)
+  const preFuelWarning = ['ride','run','longride'].includes(todayLog.training_day) && macros.lunch.c < 40 && mealItems.lunch.length > 0
 
   let statusColor = 'var(--mu)', statusMsg = 'Add meals to see your daily total'
   if (hasAny) {
@@ -173,8 +233,27 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
     else { statusColor='var(--danger)'; statusMsg=diff+' kcal over target — swap something' }
   }
 
+  const MEAL_LABELS: Record<MealKey, string> = {
+    breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner', extras: 'Extras'
+  }
+
   return (
     <div>
+      {/* Auto-save indicator */}
+      {saveStatus !== 'idle' && (
+        <div style={{
+          position: 'fixed', top: 56, right: 16, zIndex: 200,
+          padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+          background: saveStatus === 'saved' ? 'var(--good)' : 'var(--s2)',
+          color: saveStatus === 'saved' ? '#000' : 'var(--mu)',
+          border: '0.5px solid ' + (saveStatus === 'saved' ? 'var(--good)' : 'var(--b2)'),
+          transition: 'all 0.3s',
+        }}>
+          {saveStatus === 'saving' ? '...' : '✓ Saved'}
+        </div>
+      )}
+
+      {/* Training day */}
       <div style={S.sec}>
         <div style={S.stitle}>Training Day</div>
         <select style={S.select} value={todayLog.training_day||'rest'} onChange={e => onUpdate({ training_day: e.target.value })}>
@@ -194,6 +273,7 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
         )}
       </div>
 
+      {/* Macro targets */}
       <div style={{ ...S.sec, ...S.card }}>
         <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>Macro Targets</div>
         <MacroBar label="Protein" current={total.p} target={training.protein} color="var(--ac)" />
@@ -201,6 +281,7 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
         <MacroBar label="Fat" current={total.f} target={training.fat} color="var(--purple)" />
       </div>
 
+      {/* Water */}
       <div style={{ ...S.sec, ...S.card }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: 'var(--mu)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>Water</div>
@@ -219,17 +300,27 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
         </div>
       </div>
 
-      <MealSection title="Breakfast" items={breakfast} foodOptions={foodOptions} macros={bfM} onAdd={(f:any)=>addItem('breakfast',f)} onRemove={(id:string)=>removeItem('breakfast',id)} onQtyChange={(id:string,qty:number)=>updateQty('breakfast',id,qty)} />
-      <MealSection title="Lunch" items={lunch} foodOptions={foodOptions} macros={lnM} onAdd={(f:any)=>addItem('lunch',f)} onRemove={(id:string)=>removeItem('lunch',id)} onQtyChange={(id:string,qty:number)=>updateQty('lunch',id,qty)} />
-      <MealSection title="Snack" items={snack} foodOptions={foodOptions} macros={snM} onAdd={(f:any)=>addItem('snack',f)} onRemove={(id:string)=>removeItem('snack',id)} onQtyChange={(id:string,qty:number)=>updateQty('snack',id,qty)} />
-      <MealSection title="Dinner" items={dinner} foodOptions={foodOptions} macros={dnM} onAdd={(f:any)=>addItem('dinner',f)} onRemove={(id:string)=>removeItem('dinner',id)} onQtyChange={(id:string,qty:number)=>updateQty('dinner',id,qty)} />
-      <MealSection title="Extras" items={extras} foodOptions={foodOptions} macros={exM} onAdd={(f:any)=>addItem('extras',f)} onRemove={(id:string)=>removeItem('extras',id)} onQtyChange={(id:string,qty:number)=>updateQty('extras',id,qty)} />
+      {/* Meals */}
+      {MEALS.map(meal => (
+        <MealSection
+          key={meal}
+          title={MEAL_LABELS[meal]}
+          items={mealItems[meal]}
+          foodOptions={foodOptions}
+          macros={macros[meal]}
+          onAdd={(f: any) => addItem(meal, f)}
+          onRemove={(id: string) => removeItem(meal, id)}
+          onQtyChange={(id: string, qty: number) => updateQty(meal, id, qty)}
+        />
+      ))}
 
+      {/* Summary */}
       <div style={{ ...S.sec, ...S.card }}>
         <div style={{ fontSize: 10, color: 'var(--mu)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 12 }}>Daily Summary</div>
-        {[{label:'Breakfast',m:bfM},{label:'Lunch',m:lnM},{label:'Snack',m:snM},{label:'Dinner',m:dnM},...(extras.length?[{label:'Extras ('+extras.length+')',m:exM}]:[])].map(row => (
-          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13, color: 'var(--mu)' }}>
-            <span>{row.label}</span><span style={{ color: 'var(--tx)', fontWeight: 500 }}>{row.m.kcal} kcal</span>
+        {MEALS.filter(m => macros[m].kcal > 0).map(m => (
+          <div key={m} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13, color: 'var(--mu)' }}>
+            <span>{MEAL_LABELS[m]}</span>
+            <span style={{ color: 'var(--tx)', fontWeight: 500 }}>{macros[m].kcal} kcal</span>
           </div>
         ))}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 17, fontWeight: 700, borderTop: '0.5px solid var(--b1)', paddingTop: 10, marginTop: 4 }}>
@@ -248,9 +339,6 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
           ))}
         </div>
         {hasAny && <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 'var(--rs)', background: statusColor==='var(--good)'?'var(--good2)':statusColor==='var(--danger)'?'var(--danger2)':'var(--warn2)', fontSize: 12, fontWeight: 500, color: statusColor, textAlign: 'center' as const }}>{statusMsg}</div>}
-        <button onClick={() => onUpdate({ meals: [{breakfast:bfM,lunch:lnM,snack:snM,dinner:dnM,extras:exM,total}] })} style={{ width: '100%', marginTop: 14, padding: 12, background: 'var(--ac2)', border: '0.5px solid var(--ac)', borderRadius: 'var(--rs)', color: 'var(--ac)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-          Save Today&#39;s Log ✓
-        </button>
       </div>
       <div style={{ height: 24 }} />
     </div>
