@@ -117,8 +117,8 @@ async function checkActivityAchievements(activity: any, accessToken: string) {
       .eq('user_id', USER_ID)
 
     const unlocked = new Set((existing || []).map((e: any) => e.achievement_key))
-
-    async function unlock(key: string) {
+    
+    const unlock = async (key: string) => {
       if (unlocked.has(key)) return
       await supabase.from('achievements').insert({ user_id: USER_ID, achievement_key: key })
       unlocked.add(key)
