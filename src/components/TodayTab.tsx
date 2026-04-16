@@ -252,14 +252,20 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
       f: Math.round((acc.f + totals[m].f) * 10) / 10,
     }), { kcal: 0, p: 0, c: 0, f: 0 })
 
-    await supabase.from('daily_logs').upsert({
+    const { error } = await supabase.from('daily_logs').upsert({
       user_id: USER_ID,
       date: today,
       training_day: todayLog.training_day || 'rest',
       water_ml: todayLog.water_ml || 0,
       meal_items: JSON.stringify(items),
       meals: [{ ...totals, total }],
-    })
+    }, { onConflict: 'user_id,date' })
+    if (error) {
+      console.error('Save error:', error)
+      alert('Opslaan mislukt: ' + error.message)
+      setSaveStatus('idle')
+      return
+    }
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
   }
