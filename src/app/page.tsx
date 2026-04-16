@@ -20,9 +20,23 @@ export default function Home() {
   const [settings, setSettings] = useState<any>(null)
   const [todayLog, setTodayLog] = useState<any>(null)
   const [streak, setStreak] = useState(0)
+  const [moments, setMoments] = useState<any[]>([])
 
   useEffect(() => { loadSettings() }, [])
   useEffect(() => { if (settings) loadToday() }, [settings])
+  useEffect(() => { loadMoments() }, [])
+
+  async function loadMoments() {
+    const { data } = await supabase.from('partner_moments')
+      .select('*').eq('to_user_id', USER_ID).eq('read', false)
+      .order('created_at', { ascending: false }).limit(5)
+    setMoments(data || [])
+  }
+
+  async function dismissMoment(id: string) {
+    await supabase.from('partner_moments').update({ read: true }).eq('id', id)
+    setMoments(prev => prev.filter((m: any) => m.id !== id))
+  }
 
   async function loadSettings() {
     const { data } = await supabase.from('settings').select('*').eq('user_id', USER_ID).single()
@@ -111,6 +125,17 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Franziska moment banner */}
+      {moments.length > 0 && (
+        <div style={{ margin: '0 16px', marginTop: 10, padding: '12px 16px', background: 'rgba(232,168,130,0.12)', border: '0.5px solid rgba(232,168,130,0.3)', borderRadius: 'var(--r)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' as const, color: '#e8a882', fontWeight: 600, marginBottom: 4 }}>💌 Nachricht von Franziska</div>
+            <div style={{ fontSize: 14, color: 'var(--tx)' }}>{moments[0].emoji} {moments[0].message}</div>
+          </div>
+          <button onClick={() => dismissMoment(moments[0].id)} style={{ background: 'none', border: 'none', color: 'var(--mu)', fontSize: 20, padding: '0 0 0 12px', cursor: 'pointer' }}>×</button>
+        </div>
+      )}
 
       {/* Tab content */}
       <div style={{ padding: '0 16px' }}>
