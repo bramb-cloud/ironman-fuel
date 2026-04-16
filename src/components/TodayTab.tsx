@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { TRAINING_TARGETS, INGREDIENTS } from '@/lib/foods'
+import { TRAINING_TARGETS, INGREDIENTS, BREAKFASTS, LUNCHES, SNACKS, FIXED_DINNERS, SUGGESTED_DINNERS } from '@/lib/foods'
 import { supabase, USER_ID } from '@/lib/supabase'
 
 const S = {
@@ -27,8 +27,8 @@ function MacroBar({ label, current, target, color }: any) {
 }
 
 function MealItem({ item, onRemove, onQtyChange }: any) {
-  const [qty, setQty] = useState(item.qty || 100)
-  const kcal = Math.round(item.kcalPer * qty / 100)
+  const [qty, setQty] = useState(item.qty || (item.isUnit ? 1 : 100))
+  const kcal = item.isUnit ? Math.round(item.kcalPer * qty) : Math.round(item.kcalPer * qty / 100)
   function handleQty(v: number) { setQty(v); onQtyChange(item.id, v) }
   return (
     <div style={{ background: 'var(--s2)', borderRadius: 'var(--rs)', padding: '10px 12px', marginBottom: 8 }}>
@@ -37,14 +37,25 @@ function MealItem({ item, onRemove, onQtyChange }: any) {
         <button onClick={() => onRemove(item.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: 20, padding: '0 4px', cursor: 'pointer' }}>×</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 36px 52px', alignItems: 'center', gap: 8 }}>
-        <input type="range" min={item.isUnit ? 1 : 10} max={item.isUnit ? 20 : 500} step={item.isUnit ? 1 : 10} value={qty} onChange={e => handleQty(+e.target.value)} />
-        <input type="number" value={qty} min={item.isUnit ? 1 : 10} max={item.isUnit ? 20 : 500} step={item.isUnit ? 1 : 10} onChange={e => handleQty(+e.target.value)}
+        <input type="range"
+          min={item.isUnit ? 1 : 10}
+          max={item.isUnit ? (item.isFixedMeal ? 2 : 20) : 500}
+          step={item.isUnit ? 1 : 10}
+          value={qty} onChange={e => handleQty(+e.target.value)} />
+        <input type="number" value={qty}
+          min={item.isUnit ? 1 : 10}
+          max={item.isUnit ? (item.isFixedMeal ? 2 : 20) : 500}
+          step={item.isUnit ? 1 : 10}
+          onChange={e => handleQty(+e.target.value)}
           style={{ padding: '4px', fontSize: 12, fontWeight: 600, border: '0.5px solid var(--b2)', borderRadius: 6, background: 'var(--s1)', color: 'var(--tx)', textAlign: 'center', width: '100%' }} />
         <span style={{ fontSize: 10, color: 'var(--mu)' }}>{item.unit}</span>
         <span style={{ fontSize: 11, color: 'var(--ac)', textAlign: 'right' }}>{kcal} kcal</span>
       </div>
       <div style={{ fontSize: 10, color: 'var(--mu)', marginTop: 4 }}>
-        P {Math.round(item.pPer * qty / 100 * 10)/10}g · C {Math.round(item.cPer * qty / 100 * 10)/10}g · F {Math.round(item.fPer * qty / 100 * 10)/10}g
+        {item.isUnit
+          ? `P ${Math.round(item.pPer * qty * 10)/10}g · C ${Math.round(item.cPer * qty * 10)/10}g · F ${Math.round(item.fPer * qty * 10)/10}g`
+          : `P ${Math.round(item.pPer * qty / 100 * 10)/10}g · C ${Math.round(item.cPer * qty / 100 * 10)/10}g · F ${Math.round(item.fPer * qty / 100 * 10)/10}g`
+        }
       </div>
     </div>
   )
@@ -103,7 +114,9 @@ function MealSection({ title, items, onAdd, onRemove, onQtyChange, foodOptions, 
 
 function sumMacros(items: any[]) {
   return items.reduce((acc, item) => {
-    const r = item.qty / 100
+    // Unit items (pcs, bars, slices etc): kcalPer is per unit, qty is count → multiply directly
+    // Gram items: kcalPer is per 100g, qty is grams → divide by 100
+    const r = item.isUnit ? item.qty : item.qty / 100
     return {
       kcal: acc.kcal + Math.round(item.kcalPer * r),
       p: Math.round((acc.p + item.pPer * r) * 10) / 10,
@@ -146,21 +159,77 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
   }, [todayLog?.id])
 
   async function buildFoodOptions() {
+    // Individual ingredients
     const builtin = Object.entries(INGREDIENTS).map(([key, info]) => ({
       id: 'builtin_'+key, name: info.l,
       kcalPer: info.isU ? info.k : info.k * 100,
       pPer: info.isU ? info.p : info.p * 100,
       cPer: info.isU ? info.c : info.c * 100,
       fPer: info.isU ? info.f : info.f * 100,
-      unit: info.u, isUnit: !!info.isU, defaultQty: info.isU ? info.mn : 100, isCustom: false,
+      unit: info.u, isUnit: !!info.isU,
+      defaultQty: info.isU ? Math.max(1, info.mn) : 100,
+      isCustom: false,
     }))
+
+    // Fixed meal combos — show as single searchable items with fixed macros
+    const fixedMeals: any[] = []
+    const allMealLists = [
+      ...BREAKFASTS.map((m: any) => ({ ...m, cat: '🍳 Frühstück' })),
+      ...LUNCHES.map((m: any) => ({ ...m, cat: '🥗 Mittagessen' })),
+      ...SNACKS.map((m: any) => ({ ...m, cat: '🍫 Snack' })),
+      ...FIXED_DINNERS.map((m: any) => ({ ...m, cat: '🍽️ Abendessen' })),
+      ...SUGGESTED_DINNERS.map((m: any) => ({ ...m, cat: '🍽️ Abendessen' })),
+    ]
+
+    allMealLists.forEach((meal: any, i: number) => {
+      // Calculate total macros for this meal at default quantities
+      let kcal = 0, p = 0, c = 0, f = 0
+      if (meal.fixed) {
+        kcal = meal.fixed.kcal; p = meal.fixed.p; c = meal.fixed.c; f = meal.fixed.f
+      } else if (meal.ings && meal.ings.length > 0) {
+        meal.ings.forEach((ing: any) => {
+          const info = INGREDIENTS[ing.k]
+          if (!info) return
+          const qty = ing.d
+          const r = info.isU ? qty : qty / 100
+          kcal += Math.round(info.k * (info.isU ? qty : qty * 100) / 100)
+          p += info.p * (info.isU ? qty : qty)
+          c += info.c * (info.isU ? qty : qty)
+          f += info.f * (info.isU ? qty : qty)
+        })
+        // Recalculate properly
+        kcal = 0; p = 0; c = 0; f = 0
+        meal.ings.forEach((ing: any) => {
+          const info = INGREDIENTS[ing.k]
+          if (!info) return
+          const r = info.isU ? ing.d : ing.d / 100
+          kcal += info.k * (info.isU ? ing.d : ing.d)
+          p += info.p * (info.isU ? ing.d : ing.d)
+          c += info.c * (info.isU ? ing.d : ing.d)
+          f += info.f * (info.isU ? ing.d : ing.d)
+        })
+      }
+      if (kcal > 0 || meal.fixed) {
+        fixedMeals.push({
+          id: `meal_${i}_${meal.name}`,
+          name: `${meal.cat}: ${meal.name}`,
+          kcalPer: Math.round(kcal) || (meal.fixed?.kcal || 0),
+          pPer: Math.round(p * 10) / 10 || (meal.fixed?.p || 0),
+          cPer: Math.round(c * 10) / 10 || (meal.fixed?.c || 0),
+          fPer: Math.round(f * 10) / 10 || (meal.fixed?.f || 0),
+          unit: 'portion', isUnit: true, defaultQty: 1, isCustom: false, isFixedMeal: true,
+        })
+      }
+    })
+
     const { data: custom } = await supabase.from('custom_foods').select('*').eq('user_id', USER_ID)
     const customFoods = (custom || []).map((f: any) => ({
       id: 'custom_'+f.id, name: f.name,
       kcalPer: f.kcal_per_100g, pPer: f.protein_per_100g, cPer: f.carbs_per_100g, fPer: f.fat_per_100g,
       unit: 'g', isUnit: false, defaultQty: 100, isCustom: true,
     }))
-    setFoodOptions([...customFoods, ...builtin])
+
+    setFoodOptions([...customFoods, ...fixedMeals, ...builtin])
   }
 
   // Auto-save whenever meal items change (with debounce)
