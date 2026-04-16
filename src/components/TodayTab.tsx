@@ -140,23 +140,31 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
   const training = TRAINING_TARGETS[todayLog.training_day || 'rest']
   const target = settings['kcal_'+(todayLog.training_day||'rest')] || training.kcal
 
-  useEffect(() => { buildFoodOptions() }, [])
-
-  // Load saved meal items on every mount
   useEffect(() => {
-    if (todayLog?.meal_items) {
+    loadMealsFromDB()
+    buildFoodOptions()
+  }, [])
+
+  async function loadMealsFromDB() {
+    const today = new Date().toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('daily_logs')
+      .select('meal_items')
+      .eq('user_id', USER_ID)
+      .eq('date', today)
+      .single()
+    if (data?.meal_items) {
       try {
-        const saved = typeof todayLog.meal_items === 'string'
-          ? JSON.parse(todayLog.meal_items)
-          : todayLog.meal_items
+        const saved = typeof data.meal_items === 'string'
+          ? JSON.parse(data.meal_items)
+          : data.meal_items
         if (saved && typeof saved === 'object') {
           setMealItems({ breakfast: [], lunch: [], snack: [], dinner: [], extras: [], ...saved })
         }
       } catch (e) {}
     }
-    // Small delay before enabling auto-save so we don't save empty state over loaded data
-    setTimeout(() => setLoaded(true), 300)
-  }, []) // Run once on mount — todayLog is already loaded when component renders
+    setLoaded(true)
+  }
 
   async function buildFoodOptions() {
     // Individual ingredients
