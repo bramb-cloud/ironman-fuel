@@ -1,18 +1,25 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase, USER_ID } from '@/lib/supabase'
 
 const STRAVA_CLIENT_ID = '212915'
 const REDIRECT_URI = 'https://ironman-fuel.vercel.app/api/strava'
+const FRANZISKA_ID = 'franziska_brinkmeier'
+
+const QUICK_MESSAGES = [
+  { emoji: '🚴', text: 'Gerade meine Ausfahrt beendet — denke an euch beide!' },
+  { emoji: '💪', text: 'Training abgeschlossen. Linnea wird stolz sein!' },
+  { emoji: '❤️', text: 'Ich liebe euch beide so sehr 💕' },
+  { emoji: '🌟', text: 'Du machst das großartig, Franziska!' },
+  { emoji: '🍕', text: 'Was isst du heute Abend? 😄' },
+  { emoji: '🌙', text: 'Gute Nacht ihr zwei 🌙' },
+]
 
 export default function SettingsTab({ settings, onUpdate }: any) {
   const [saved, setSaved] = useState(false)
-  const [stravaConnected, setStravaConnected] = useState(!!settings?.strava_access_token)
-
-  useEffect(() => {
-    supabase.from('settings').select('strava_access_token').eq('user_id', USER_ID).single()
-      .then(({ data }) => setStravaConnected(!!data?.strava_access_token))
-  }, [])
+  const [momentSent, setMomentSent] = useState(false)
+  const [customMsg, setCustomMsg] = useState('')
+  const [showMoments, setShowMoments] = useState(false)
 
   async function clearToday() {
     const today = new Date().toISOString().split('T')[0]
@@ -30,6 +37,18 @@ export default function SettingsTab({ settings, onUpdate }: any) {
     const scope = 'read,activity:read_all'
     const url = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${scope}`
     window.location.href = url
+  }
+
+  async function sendMoment(emoji: string, text: string) {
+    await supabase.from('partner_moments').insert({
+      from_user_id: USER_ID,
+      to_user_id: FRANZISKA_ID,
+      message: text,
+      emoji,
+    })
+    setMomentSent(true)
+    setCustomMsg('')
+    setTimeout(() => setMomentSent(false), 2500)
   }
 
   const inputStyle = {
@@ -50,11 +69,50 @@ export default function SettingsTab({ settings, onUpdate }: any) {
         </div>
       )}
 
+      {momentSent && (
+        <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', background: '#e8a882', color: '#fff', padding: '8px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600, zIndex: 200, whiteSpace: 'nowrap' }}>
+          💌 Nachricht an Franziska gesendet!
+        </div>
+      )}
+
+      {/* Partner moments */}
+      <div style={sec}>
+        <div style={stitle}>💌 Nachricht an Franziska</div>
+        <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 14, lineHeight: 1.5 }}>
+            Schick ihr eine kleine Nachricht — sie sieht sie direkt in Sprout.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {QUICK_MESSAGES.map((m, i) => (
+              <button key={i} onClick={() => sendMoment(m.emoji, m.text)} style={{
+                padding: '10px 14px', background: 'var(--s2)', border: '0.5px solid var(--b1)',
+                borderRadius: 'var(--rs)', color: 'var(--tx)', fontSize: 13, textAlign: 'left', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 10
+              }}>
+                <span style={{ fontSize: 18 }}>{m.emoji}</span>
+                <span>{m.text}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input placeholder="Eigene Nachricht..." value={customMsg} onChange={e => setCustomMsg(e.target.value)}
+              style={{ ...inputStyle, fontSize: 13 }} onKeyDown={e => e.key === 'Enter' && customMsg && sendMoment('💬', customMsg)} />
+            <button onClick={() => customMsg && sendMoment('💬', customMsg)} style={{
+              padding: '11px 14px', background: customMsg ? 'rgba(232,168,130,0.2)' : 'transparent',
+              border: `0.5px solid ${customMsg ? '#e8a882' : 'var(--b1)'}`,
+              borderRadius: 'var(--rs)', color: customMsg ? '#e8a882' : 'var(--mu)', fontWeight: 600, fontSize: 14
+            }}>
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Strava */}
       <div style={sec}>
         <div style={stitle}>Strava Connection</div>
         <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 16 }}>
-          {stravaConnected ? (
+          {settings.strava_access_token ? (
             <div>
               <div style={{ fontSize: 13, color: 'var(--good)', fontWeight: 600, marginBottom: 4 }}>✓ Connected to Strava</div>
               <div style={{ fontSize: 12, color: 'var(--mu)' }}>Activities sync automatically when you finish a workout on Garmin.</div>
