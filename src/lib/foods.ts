@@ -49,6 +49,8 @@ export const INGREDIENTS: Record<string, {
   wine: { l: 'Wine (glass 150ml)', u: 'glasses', mn: 1, mx: 5, st: 1, k: 122, p: 0.1, c: 3.8, f: 0, isU: true },
   kroketten: { l: 'Kroketten', u: 'pcs', mn: 1, mx: 10, st: 1, k: 65, p: 1.2, c: 7, f: 3.5, isU: true },
   fries: { l: 'Fries (restaurant portion)', u: 'g', mn: 50, mx: 300, st: 25, k: 3.12, p: 0.04, c: 0.38, f: 0.15 },
+  mcnugget: { l: "McDonald's Chicken Nugget", u: 'pcs', mn: 1, mx: 20, st: 1, k: 44, p: 2.8, c: 3.3, f: 2.2, isU: true },
+  icedcoffeeshake: { l: 'Iced Coffee Shake Choc (0.4L)', u: 'cup', mn: 1, mx: 2, st: 1, k: 485, p: 9.5, c: 76, f: 15, isU: true },
 }
 
 export type Ingredient = { k: string; d: number }
