@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { TRAINING_TARGETS, INGREDIENTS, BREAKFASTS, LUNCHES, SNACKS, FIXED_DINNERS, SUGGESTED_DINNERS } from '@/lib/foods'
 import { supabase, USER_ID } from '@/lib/supabase'
 
@@ -136,7 +136,6 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
   const [foodOptions, setFoodOptions] = useState<any[]>([])
   const [loaded, setLoaded] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle'|'saving'|'saved'>('idle')
-  const saveTimer = useRef<any>(null)
 
   const training = TRAINING_TARGETS[todayLog.training_day || 'rest']
   const target = settings['kcal_'+(todayLog.training_day||'rest')] || training.kcal
@@ -232,14 +231,6 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
 
     setFoodOptions([...customFoods, ...fixedMeals, ...builtin])
   }
-
-  // Auto-save whenever meal items change (with debounce)
-  useEffect(() => {
-    if (!loaded) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    setSaveStatus('saving')
-    saveTimer.current = setTimeout(() => persistMeals(mealItems), 800)
-  }, [mealItems, loaded])
 
   async function persistMeals(items: Record<MealKey, any[]>) {
     const today = new Date().toISOString().split('T')[0]
@@ -409,6 +400,28 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
           ))}
         </div>
         {hasAny && <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 'var(--rs)', background: statusColor==='var(--good)'?'var(--good2)':statusColor==='var(--danger)'?'var(--danger2)':'var(--warn2)', fontSize: 12, fontWeight: 500, color: statusColor, textAlign: 'center' as const }}>{statusMsg}</div>}
+
+        {/* Manual save button */}
+        <button
+          onClick={async () => {
+            setSaveStatus('saving')
+            await persistMeals(mealItems)
+          }}
+          disabled={saveStatus === 'saving'}
+          style={{
+            width: '100%', marginTop: 14, padding: 14,
+            background: saveStatus === 'saved' ? 'var(--good2)' : 'var(--ac2)',
+            border: `0.5px solid ${saveStatus === 'saved' ? 'var(--good)' : 'var(--ac)'}`,
+            borderRadius: 'var(--rs)',
+            color: saveStatus === 'saved' ? 'var(--good)' : 'var(--ac)',
+            fontSize: 15, fontWeight: 700, cursor: 'pointer',
+            transition: 'all 0.3s',
+          }}>
+          {saveStatus === 'saving' ? '...' : saveStatus === 'saved' ? '✓ Opgeslagen!' : '💾 Dag opslaan'}
+        </button>
+        <div style={{ fontSize: 11, color: 'var(--mu)', textAlign: 'center' as const, marginTop: 6 }}>
+          Druk op opslaan voor je de app sluit
+        </div>
       </div>
       <div style={{ height: 24 }} />
     </div>
