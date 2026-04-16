@@ -143,7 +143,7 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
 
   useEffect(() => { buildFoodOptions() }, [])
 
-  // Load saved meal items from Supabase on mount
+  // Load saved meal items on every mount
   useEffect(() => {
     if (todayLog?.meal_items) {
       try {
@@ -151,12 +151,13 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
           ? JSON.parse(todayLog.meal_items)
           : todayLog.meal_items
         if (saved && typeof saved === 'object') {
-          setMealItems(prev => ({ ...prev, ...saved }))
+          setMealItems({ breakfast: [], lunch: [], snack: [], dinner: [], extras: [], ...saved })
         }
       } catch (e) {}
     }
-    setLoaded(true)
-  }, [todayLog?.id])
+    // Small delay before enabling auto-save so we don't save empty state over loaded data
+    setTimeout(() => setLoaded(true), 300)
+  }, []) // Run once on mount — todayLog is already loaded when component renders
 
   async function buildFoodOptions() {
     // Individual ingredients
