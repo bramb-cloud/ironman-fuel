@@ -137,7 +137,10 @@ export default function ProgressTab({ settings }: any) {
   monday.setDate(now.getDate() - dayOfWeek)
   monday.setHours(0, 0, 0, 0)
 
-  const thisWeekActs = activities.filter(a => new Date(a.start_date) >= monday)
+  const thisWeekActs = activities.filter(a => {
+    const actDate = new Date(a.start_date)
+    return actDate >= monday
+  })
 
   const weekBikeKm = thisWeekActs
     .filter(a => a.activity_type === 'Ride' || a.activity_type === 'VirtualRide')
@@ -147,11 +150,10 @@ export default function ProgressTab({ settings }: any) {
     .filter(a => a.activity_type === 'Run')
     .reduce((s, a) => s + (a.distance_m || 0) / 1000, 0)
 
-  // Strength sessions this week from daily_logs
-  const strengthThisWeek = logs.filter(l => {
-    const d = new Date(l.date)
-    return d >= monday && (l.training_day === 'strength')
-  }).length
+  // Strength: detect WeightTraining, Workout, or any non-cardio Strava type this week
+  const strengthThisWeek = thisWeekActs
+    .filter(a => ['WeightTraining', 'Workout', 'Crossfit', 'RockClimbing', 'Yoga'].includes(a.activity_type))
+    .length
 
   // Overall weekly training score
   const bikePct = Math.min(100, targets.bike_km > 0 ? (weekBikeKm / targets.bike_km) * 100 : 0)
@@ -219,6 +221,11 @@ export default function ProgressTab({ settings }: any) {
             ⚡ Focus: {biggestGap.label} is furthest behind — {biggestGap.remaining.toFixed(1)}{biggestGap.unit} still needed this week
           </div>
         )}
+
+        {/* Debug — remove once bars work */}
+        <div style={{ fontSize: 10, color: 'var(--mu)', marginBottom: 12, padding: '6px 10px', background: 'var(--s2)', borderRadius: 'var(--rs)' }}>
+          🔍 This week ({monday.toLocaleDateString('de')} → now): {thisWeekActs.length} activities · {weekBikeKm.toFixed(1)}km bike · {weekRunKm.toFixed(1)}km run · {strengthThisWeek} strength · Total loaded: {activities.length}
+        </div>
 
         {trainingScore >= 100 && (
           <div style={{ background: 'var(--good2)', border: '0.5px solid var(--good)', borderRadius: 'var(--rs)', padding: '8px 12px', marginBottom: 16, fontSize: 12, color: 'var(--good)', fontWeight: 600 }}>
@@ -332,7 +339,7 @@ export default function ProgressTab({ settings }: any) {
           {activities.slice(0, 8).map((a: any, i: number) => {
             const icon = a.activity_type === 'Ride' || a.activity_type === 'VirtualRide' ? '🚴' : a.activity_type === 'Run' ? '🏃' : '🏊'
             const km = ((a.distance_m || 0) / 1000).toFixed(1)
-            const mins = Math.round((a.moving_time_s || 0) / 60)
+            const mins = Math.round((a.duration_s || 0) / 60)
             const date = new Date(a.start_date).toLocaleDateString('de', { weekday: 'short', day: 'numeric', month: 'short' })
             return (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, marginBottom: 10, borderBottom: i < 7 ? '0.5px solid var(--b1)' : 'none' }}>
