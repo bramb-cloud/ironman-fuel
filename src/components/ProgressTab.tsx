@@ -8,9 +8,9 @@ const IRONMAN_DATE = new Date('2027-09-07')
 // Phase 1 Foundation defaults — Apr-Jun 2026
 // Cycling strong, running needs work — targets reflect this gap intentionally
 const DEFAULT_TARGETS = {
-  bike_km: 60,    // 2 rides ~30km each — current level
-  run_km: 8,      // 2 runs — 3+5km, building carefully with meniscus
-  strength: 2,    // sessions per week — already consistent
+  bike_km: 60,
+  run_km: 15,   // 3 runs of 5km — more realistic given current fitness
+  strength: 2,
 }
 
 function SportBar({ icon, label, current, target, unit, color, sublabel }: any) {
@@ -38,11 +38,12 @@ function SportBar({ icon, label, current, target, unit, color, sublabel }: any) 
       </div>
 
       {/* Bar */}
-      <div style={{ position: 'relative', height: 12, background: 'var(--s2)', borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: 12, background: 'rgba(255,255,255,0.08)', borderRadius: 6, overflow: 'hidden' }}>
         <div style={{
           height: 12, width: `${pct}%`, borderRadius: 6,
-          background: `linear-gradient(90deg, ${color}99, ${color})`,
+          background: pct >= 100 ? '#4caf50' : pct >= 60 ? '#ff9800' : color,
           transition: 'width 0.6s ease',
+          minWidth: pct > 0 ? 6 : 0,
         }} />
       </div>
 
@@ -222,10 +223,7 @@ export default function ProgressTab({ settings }: any) {
           </div>
         )}
 
-        {/* Debug — remove once bars work */}
-        <div style={{ fontSize: 10, color: 'var(--mu)', marginBottom: 12, padding: '6px 10px', background: 'var(--s2)', borderRadius: 'var(--rs)' }}>
-          🔍 This week ({monday.toLocaleDateString('de')} → now): {thisWeekActs.length} activities · {weekBikeKm.toFixed(1)}km bike · {weekRunKm.toFixed(1)}km run · {strengthThisWeek} strength · Total loaded: {activities.length}
-        </div>
+        {/* Sport bars */}
 
         {trainingScore >= 100 && (
           <div style={{ background: 'var(--good2)', border: '0.5px solid var(--good)', borderRadius: 'var(--rs)', padding: '8px 12px', marginBottom: 16, fontSize: 12, color: 'var(--good)', fontWeight: 600 }}>
