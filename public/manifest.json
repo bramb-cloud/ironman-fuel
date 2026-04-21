@@ -1,11 +1,11 @@
 {
-  "name": "IronFuel",
+  "name": "IronFuel ⚡",
   "short_name": "IronFuel",
-  "description": "Your Ironman nutrition and training coach",
+  "description": "Ironman training fuel tracker",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0f0f",
-  "theme_color": "#0f0f0f",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
   "orientation": "portrait",
   "icons": [
     {

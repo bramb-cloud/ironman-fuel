@@ -6,7 +6,7 @@ import { supabase, USER_ID } from '@/lib/supabase'
 const S = {
   sec: { marginTop: 22 } as any,
   stitle: { fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const, color: 'var(--mu)', marginBottom: 8, padding: '0 2px' },
-  card: { background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 14, marginTop: 8 } as any,
+  card: { background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 14, marginTop: 10 } as any,
   select: { width: '100%', padding: '13px 40px 13px 14px', fontSize: 14, border: '0.5px solid var(--b2)', borderRadius: 'var(--r)', background: 'var(--s2)', color: 'var(--tx)' } as any,
 }
 
@@ -313,63 +313,140 @@ export default function TodayTab({ todayLog, settings, onUpdate, streak }: any) 
   }
 
   return (
-    <div>
-      {/* Auto-save indicator */}
+    <div style={{ paddingTop: 8 }}>
+      {/* Save indicator */}
       {saveStatus !== 'idle' && (
         <div style={{
           position: 'fixed', top: 56, right: 16, zIndex: 200,
-          padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+          padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700,
           background: saveStatus === 'saved' ? 'var(--good)' : 'var(--s2)',
           color: saveStatus === 'saved' ? '#000' : 'var(--mu)',
           border: '0.5px solid ' + (saveStatus === 'saved' ? 'var(--good)' : 'var(--b2)'),
-          transition: 'all 0.3s',
         }}>
           {saveStatus === 'saving' ? '...' : '✓ Saved'}
         </div>
       )}
 
-      {/* Training day */}
-      <div style={S.sec}>
-        <div style={S.stitle}>Training Day</div>
-        <select style={S.select} value={todayLog.training_day||'rest'} onChange={e => onUpdate({ training_day: e.target.value })}>
+      {/* Kcal ring + training day */}
+      <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 16, marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: -2, color: total.kcal > target ? 'var(--danger)' : 'var(--ac)', lineHeight: 1 }}>
+              {total.kcal}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--mu)', marginTop: 3 }}>/ {target} kcal today</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 4 }}>
+              {total.kcal < target * 0.8 ? `${target - total.kcal} kcal to go` : total.kcal > target ? `${total.kcal - target} over` : '✓ On target'}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[{ l: 'P', v: total.p, c: 'var(--ac)' }, { l: 'C', v: total.c, c: 'var(--warn)' }, { l: 'F', v: total.f, c: 'var(--purple)' }].map(m => (
+                <div key={m.l} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: m.c }}>{Math.round(m.v)}</div>
+                  <div style={{ fontSize: 9, color: 'var(--mu)' }}>{m.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Kcal bar */}
+        <div style={{ height: 6, background: 'var(--s3)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+          <div style={{ height: 6, width: `${Math.min(100, (total.kcal / target) * 100)}%`, background: total.kcal > target ? 'var(--danger)' : 'var(--ac)', borderRadius: 3, transition: 'width 0.4s' }} />
+        </div>
+        {/* Training day selector */}
+        <select style={{ width: '100%', padding: '11px 40px 11px 14px', fontSize: 13, border: '0.5px solid var(--b2)', borderRadius: 'var(--rs)', background: 'var(--s2)', color: 'var(--tx)' }}
+          value={todayLog.training_day || 'rest'} onChange={e => onUpdate({ training_day: e.target.value })}>
           <option value="rest">🛋️ Rest day — {settings.kcal_rest} kcal</option>
-          <option value="strength">🏋️ Strength session — {settings.kcal_strength} kcal</option>
+          <option value="strength">🏋️ Strength — {settings.kcal_strength} kcal</option>
           <option value="ride">🚴 Zone 2 ride — {settings.kcal_ride} kcal</option>
           <option value="run">🏃 Zone 2 run — {settings.kcal_run} kcal</option>
-          <option value="longride">🚴 Long ride (Sat) — {settings.kcal_longride} kcal</option>
+          <option value="longride">🚴 Long ride — {settings.kcal_longride} kcal</option>
         </select>
-        <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--s1)', borderRadius: 'var(--rs)', border: '0.5px solid var(--b1)', fontSize: 12, color: 'var(--mu2)', lineHeight: 1.5 }}>
-          <span style={{ color: training.color, fontWeight: 600 }}>{training.label} · </span>{training.tip}
-        </div>
         {preFuelWarning && (
-          <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--warn2)', borderRadius: 'var(--rs)', border: '0.5px solid var(--warn)', fontSize: 12, color: 'var(--warn)' }}>
-            ⚠️ Low carbs at lunch on a training day — eat something before your session.
+          <div style={{ marginTop: 8, padding: '9px 12px', background: 'var(--warn2)', borderRadius: 'var(--rs)', border: '0.5px solid var(--warn)', fontSize: 12, color: 'var(--warn)' }}>
+            ⚠️ Low carbs on a training day — eat before your session.
           </div>
         )}
       </div>
 
-      {/* Macro targets */}
-      <div style={{ ...S.sec, ...S.card }}>
-        <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>Macro Targets</div>
+      {/* Quick-add your most common foods */}
+      <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 14, marginTop: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase' as const, color: 'var(--mu)', marginBottom: 10 }}>Quick Add</div>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+          {[
+            { key: 'egg', label: 'Eggs', qty: 3 },
+            { key: 'oats', label: 'Oats', qty: 80 },
+            { key: 'chicken', label: 'Chicken', qty: 150 },
+            { key: 'maultasche', label: 'Maultaschen', qty: 3 },
+            { key: 'rice', label: 'Basmati', qty: 100 },
+            { key: 'banana', label: 'Banana', qty: 1 },
+            { key: 'skyr', label: 'Skyr', qty: 200 },
+            { key: 'corny', label: 'Corny Bar', qty: 1 },
+          ].map(qf => {
+            const info = INGREDIENTS[qf.key]
+            if (!info) return null
+            const kcal = info.isU ? Math.round(info.k * qf.qty) : Math.round(info.k * qf.qty)
+            return (
+              <button key={qf.key} onClick={() => {
+                const food = {
+                  id: `builtin_${qf.key}`,
+                  name: info.l,
+                  kcalPer: info.isU ? info.k : info.k * 100,
+                  pPer: info.isU ? info.p : info.p * 100,
+                  cPer: info.isU ? info.c : info.c * 100,
+                  fPer: info.isU ? info.f : info.f * 100,
+                  unit: info.u, isUnit: !!info.isU, defaultQty: qf.qty,
+                }
+                // Add to lunch by default
+                const item = {
+                  id: food.id + '_' + Date.now(),
+                  name: food.name,
+                  kcalPer: food.kcalPer, pPer: food.pPer, cPer: food.cPer, fPer: food.fPer,
+                  unit: food.unit, isUnit: food.isUnit, qty: qf.qty, isFixedMeal: false,
+                }
+                setMealItems(prev => ({ ...prev, lunch: [...prev.lunch, item] }))
+              }} style={{
+                flexShrink: 0, padding: '8px 12px',
+                background: 'var(--s2)', border: '0.5px solid var(--b2)',
+                borderRadius: 20, cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', whiteSpace: 'nowrap' as const }}>{qf.label}</span>
+                <span style={{ fontSize: 10, color: 'var(--ac)' }}>{kcal} kcal</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Training day tip */}
+      <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--s2)', borderRadius: 'var(--rs)', border: '0.5px solid var(--b1)', fontSize: 12, color: 'var(--mu2)', lineHeight: 1.5 }}>
+        <span style={{ color: training.color, fontWeight: 700 }}>{training.label} · </span>{training.tip}
+      </div>
+
+      {/* Macro bars */}
+      <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 14, marginTop: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase' as const, color: 'var(--mu)', marginBottom: 12 }}>Macros</div>
         <MacroBar label="Protein" current={total.p} target={training.protein} color="var(--ac)" />
         <MacroBar label="Carbs" current={total.c} target={training.carbs} color="var(--warn)" />
         <MacroBar label="Fat" current={total.f} target={training.fat} color="var(--purple)" />
       </div>
 
       {/* Water */}
-      <div style={{ ...S.sec, ...S.card }}>
+      <div style={{ background: 'var(--s1)', border: '0.5px solid var(--b1)', borderRadius: 'var(--r)', padding: 14, marginTop: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: 'var(--mu)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>Water</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: (todayLog.water_ml||0) >= (settings.water_target_ml||2500) ? 'var(--good)' : 'var(--tx)' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase' as const, color: 'var(--mu)' }}>Water</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: (todayLog.water_ml||0) >= (settings.water_target_ml||2500) ? 'var(--good)' : 'var(--tx)' }}>
             {((todayLog.water_ml||0)/1000).toFixed(1)}L / {((settings.water_target_ml||2500)/1000).toFixed(1)}L
           </div>
         </div>
-        <div style={{ height: 6, background: 'var(--s2)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+        <div style={{ height: 6, background: 'var(--s3)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
           <div style={{ height: 6, width: Math.min(100,((todayLog.water_ml||0)/(settings.water_target_ml||2500))*100)+'%', background: 'var(--blue)', borderRadius: 3, transition: 'width 0.4s' }} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {[250,500,750].map(ml => (
-            <button key={ml} onClick={() => onUpdate({ water_ml: (todayLog.water_ml||0)+ml })} style={{ flex: 1, padding: '9px 0', background: 'var(--s2)', border: '0.5px solid var(--b2)', borderRadius: 'var(--rs)', color: 'var(--blue)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>+{ml}ml</button>
+            <button key={ml} onClick={() => onUpdate({ water_ml: (todayLog.water_ml||0)+ml })} style={{ flex: 1, padding: '9px 0', background: 'var(--s2)', border: '0.5px solid var(--b2)', borderRadius: 'var(--rs)', color: 'var(--blue)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+{ml}ml</button>
           ))}
           <button onClick={() => onUpdate({ water_ml: 0 })} style={{ padding: '9px 12px', background: 'transparent', border: '0.5px solid var(--b1)', borderRadius: 'var(--rs)', color: 'var(--mu)', fontSize: 12, cursor: 'pointer' }}>Reset</button>
         </div>
