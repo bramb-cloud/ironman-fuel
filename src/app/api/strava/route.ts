@@ -34,31 +34,22 @@ export async function GET(request: NextRequest) {
     const tokens = await tokenRes.json()
 
     if (!tokens.access_token) {
-      console.error('No access token:', JSON.stringify(tokens))
-      return NextResponse.redirect(new URL('/?strava=error&reason=notoken', request.url))
+      return NextResponse.redirect(new URL('/?strava=error', request.url))
     }
 
-    // First try update, then insert if no row exists
-    const { error: updateError } = await supabase
-      .from('settings')
-      .update({
-        strava_access_token: tokens.access_token,
-        strava_refresh_token: tokens.refresh_token,
-        strava_token_expiry: tokens.expires_at,
-      })
-      .eq('user_id', USER_ID)
-
-    if (updateError) {
-      console.error('Token save error:', updateError)
-    }
+    await supabase.from('settings').upsert({
+      user_id: USER_ID,
+      strava_access_token: tokens.access_token,
+      strava_refresh_token: tokens.refresh_token,
+      strava_token_expiry: tokens.expires_at,
+    })
 
     // Fetch recent activities immediately
     await fetchAndStoreActivities(tokens.access_token)
 
     return NextResponse.redirect(new URL('/?strava=connected', request.url))
   } catch (e) {
-    console.error('Strava auth error:', e)
-    return NextResponse.redirect(new URL('/?strava=error&reason=exception', request.url))
+    return NextResponse.redirect(new URL('/?strava=error', request.url))
   }
 }
 
