@@ -94,6 +94,9 @@ export async function POST(request: NextRequest) {
       raw: a,
     }, { onConflict: 'strava_id' })
 
+    // Earn training coins
+    await earnCoins(a)
+
     // Check and unlock achievements based on new activity
     await checkActivityAchievements(a, accessToken)
 
@@ -101,6 +104,64 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('Webhook error:', e)
     return NextResponse.json({ ok: false })
+  }
+}
+
+async function earnCoins(activity: any) {
+  try {
+    const distKm = (activity.distance || 0) / 1000
+    const type = activity.type
+    let coins = 0
+    let desc = ''
+
+    if (type === 'Run') {
+      coins = Math.floor(distKm) // 1 coin per km running
+      desc = `🏃 Run ${distKm.toFixed(1)}km → +${coins} coins`
+    } else if (type === 'Ride' || type === 'VirtualRide') {
+      coins = Math.floor(distKm / 5) // 1 coin per 5km cycling
+      desc = `🚴 Ride ${distKm.toFixed(1)}km → +${coins} coins`
+    } else if (type === 'WeightTraining' || type === 'Workout') {
+      coins = 3 // flat 3 coins per strength session
+      desc = `💪 Strength session → +${coins} coins`
+    } else if (type === 'Swim') {
+      coins = Math.floor(distKm * 10) // 1 coin per 100m swim
+      desc = `🏊 Swim ${(distKm * 1000).toFixed(0)}m → +${coins} coins`
+    }
+
+    if (coins <= 0) return
+
+    // Get current farm state
+    const { data: farm } = await supabase.from('farm_state').select('*').eq('user_id', USER_ID).single()
+
+    if (farm) {
+      await supabase.from('farm_state').update({
+        training_coins: (farm.training_coins || 0) + coins,
+        total_training_coins_earned: (farm.total_training_coins_earned || 0) + coins,
+        updated_at: new Date().toISOString(),
+      }).eq('user_id', USER_ID)
+    } else {
+      await supabase.from('farm_state').insert({
+        user_id: USER_ID,
+        training_coins: coins,
+        farm_coins: 0,
+        animals: [],
+        crops: [],
+        decorations: [],
+        farm_level: 1,
+        total_training_coins_earned: coins,
+        last_production_check: new Date().toISOString(),
+      })
+    }
+
+    await supabase.from('farm_log').insert({
+      user_id: USER_ID,
+      event_type: 'earned',
+      description: desc,
+      coins_delta: coins,
+      coin_type: 'training',
+    })
+  } catch (e) {
+    console.error('Coin earn error:', e)
   }
 }
 
@@ -117,7 +178,7 @@ async function checkActivityAchievements(activity: any, accessToken: string) {
       .eq('user_id', USER_ID)
 
     const unlocked = new Set((existing || []).map((e: any) => e.achievement_key))
-    
+
     const unlock = async (key: string) => {
       if (unlocked.has(key)) return
       await supabase.from('achievements').insert({ user_id: USER_ID, achievement_key: key })
